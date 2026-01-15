@@ -1,0 +1,5 @@
+{
+  "name": "FlowState Planner",
+  "description": "A visual daily planner and focus timer that uses Gemini AI to break down complex goals into manageable steps.",
+  "requestFramePermissions": []
+}
