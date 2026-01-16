@@ -58,6 +58,29 @@ export interface Crystal {
   forgedAt: number; // timestamp
 }
 
+// Challenge / Rituals System
+export type ChallengeFrequency = 'daily' | 'weekly' | 'infinite';
+export type ChallengeType = 'focus_minutes' | 'task_count' | 'session_count' | 'collect_crystal' | 'specific_task';
+
+export interface Challenge {
+  id: string;
+  title: string;
+  description: string;
+  frequency: ChallengeFrequency;
+  type: ChallengeType;
+  target: number;
+  currentProgress: number;
+  completed: boolean;
+  lastReset: string; // ISO Date string
+  targetDetail?: string; // e.g., 'amethyst', '101' (taskId), or null
+}
+
+export interface Streak {
+  current: number;
+  longest: number;
+  lastLoginDate: string; // ISO Date string (YYYY-MM-DD)
+}
+
 // Data structure for a user's persisted state
 export interface UserData {
   tasks: Task[];
@@ -65,4 +88,6 @@ export interface UserData {
   achievements: Achievement[];
   stats: UserStats;
   sanctuary: Crystal[];
+  challenges: Challenge[];
+  streak: Streak;
 }

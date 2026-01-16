@@ -9,7 +9,7 @@ import AIModal from './components/AIModal';
 import Celebration from './components/Celebration';
 import AuthScreen from './components/AuthScreen';
 
-import { Task, TodoItem, ViewState, GeneratedTask, Achievement, UserStats, UserData, Crystal, CrystalType } from './types';
+import { Task, TodoItem, ViewState, GeneratedTask, Achievement, UserStats, UserData, Crystal, CrystalType, Challenge, Streak, ChallengeType } from './types';
 import { authService } from './services/storage';
 
 export default function App() {
@@ -23,6 +23,8 @@ export default function App() {
   const [todos, setTodos] = useState<TodoItem[]>([]);
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [sanctuary, setSanctuary] = useState<Crystal[]>([]);
+  const [challenges, setChallenges] = useState<Challenge[]>([]);
+  const [streak, setStreak] = useState<Streak>({ current: 0, longest: 0, lastLoginDate: '' });
   const [stats, setStats] = useState<UserStats>({
     totalTasksCompleted: 0,
     focusSessionsCompleted: 0,
@@ -40,7 +42,9 @@ export default function App() {
     if (username) {
       const data = authService.loadUserData();
       if (data) {
-        loadDataIntoState(data);
+        // We perform the streak/challenge check BEFORE setting state to ensure UI is consistent
+        const processedData = processDailyResets(data);
+        loadDataIntoState(processedData);
         setCurrentUser(username);
       }
     }
@@ -55,10 +59,12 @@ export default function App() {
         todos,
         achievements,
         stats,
-        sanctuary
+        sanctuary,
+        challenges,
+        streak
       });
     }
-  }, [tasks, todos, achievements, stats, sanctuary, currentUser, isLoading]);
+  }, [tasks, todos, achievements, stats, sanctuary, challenges, streak, currentUser, isLoading]);
 
   const loadDataIntoState = (data: UserData) => {
     setTasks(data.tasks);
@@ -66,11 +72,137 @@ export default function App() {
     setAchievements(data.achievements);
     setStats(data.stats);
     setSanctuary(data.sanctuary || []);
+    setChallenges(data.challenges || []);
+    setStreak(data.streak || { current: 0, longest: 0, lastLoginDate: '' });
+  };
+
+  // --- Logic: Date & Streaks & Dynamic Challenges ---
+  
+  const generateNewDailyChallenges = (currentTasks: Task[]): Challenge[] => {
+      const today = new Date().toISOString();
+      const crystals: CrystalType[] = ['amethyst', 'citrine', 'sapphire', 'ruby', 'emerald'];
+      // Random crystal
+      const randomCrystal = crystals[Math.floor(Math.random() * crystals.length)];
+      
+      // Random Task (if any incomplete exist)
+      const incompleteTasks = currentTasks.filter(t => !t.completed);
+      const randomTask = incompleteTasks.length > 0 
+          ? incompleteTasks[Math.floor(Math.random() * incompleteTasks.length)] 
+          : null;
+
+      // Create Crystal Challenge
+      const crystalChallenge: Challenge = {
+          id: 'daily-crystal',
+          title: `Gem Hunter`,
+          description: `Forge a ${randomCrystal.charAt(0).toUpperCase() + randomCrystal.slice(1)} today`,
+          frequency: 'daily',
+          type: 'collect_crystal',
+          target: 1,
+          currentProgress: 0,
+          completed: false,
+          lastReset: today,
+          targetDetail: randomCrystal
+      };
+
+      // Create Task Challenge
+      const taskChallenge: Challenge = randomTask ? {
+          id: 'daily-task-specific',
+          title: 'Priority Mission',
+          description: `Complete "${randomTask.title}"`,
+          frequency: 'daily',
+          type: 'specific_task',
+          target: 1,
+          currentProgress: 0,
+          completed: false,
+          lastReset: today,
+          targetDetail: randomTask.id.toString()
+      } : {
+          id: 'daily-task-generic',
+          title: 'Daily Grind',
+          description: 'Complete 3 tasks today',
+          frequency: 'daily',
+          type: 'task_count',
+          target: 3,
+          currentProgress: 0,
+          completed: false,
+          lastReset: today
+      };
+
+      return [crystalChallenge, taskChallenge];
+  };
+
+  const processDailyResets = (data: UserData): UserData => {
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    const lastLogin = data.streak?.lastLoginDate || '';
+    
+    // 1. Process Streak
+    let newStreak = { ...data.streak };
+    if (lastLogin !== todayStr) {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+        if (lastLogin === yesterdayStr) {
+            newStreak.current += 1;
+        } else {
+            newStreak.current = 1;
+        }
+        
+        if (newStreak.current > newStreak.longest) {
+            newStreak.longest = newStreak.current;
+        }
+        newStreak.lastLoginDate = todayStr;
+    }
+
+    // 2. Process Challenges
+    // We want to KEEP weekly/infinite challenges if they haven't expired, but REPLACE daily ones if expired.
+    
+    const otherChallenges = data.challenges.filter(ch => ch.frequency !== 'daily');
+    const dailyChallenges = data.challenges.filter(ch => ch.frequency === 'daily');
+    
+    // Check if daily challenges need reset
+    let newDailyChallenges = [...dailyChallenges];
+    const anyDailyExpired = dailyChallenges.some(ch => {
+        const lastResetStr = new Date(ch.lastReset).toISOString().split('T')[0];
+        return lastResetStr !== todayStr;
+    });
+
+    if (anyDailyExpired || dailyChallenges.length === 0) {
+        // Regenerate Daily Challenges
+        newDailyChallenges = generateNewDailyChallenges(data.tasks);
+    }
+
+    // Check Weekly Resets
+    const processedOtherChallenges = otherChallenges.map(ch => {
+        if (ch.frequency === 'weekly') {
+            const lastReset = new Date(ch.lastReset);
+            const diffTime = Math.abs(today.getTime() - lastReset.getTime());
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+            
+            if ((today.getDay() === 1 && todayStr !== lastReset.toISOString().split('T')[0]) || diffDays > 7) {
+                 return {
+                    ...ch,
+                    currentProgress: 0,
+                    completed: false,
+                    lastReset: today.toISOString()
+                };
+            }
+        }
+        return ch;
+    });
+
+    return {
+        ...data,
+        streak: newStreak,
+        challenges: [...newDailyChallenges, ...processedOtherChallenges]
+    };
   };
 
   const handleLoginSuccess = (username: string, data: UserData) => {
+    const processedData = processDailyResets(data);
     setCurrentUser(username);
-    loadDataIntoState(data);
+    loadDataIntoState(processedData);
   };
 
   const handleLogout = () => {
@@ -80,6 +212,48 @@ export default function App() {
     setTodos([]);
     setAchievements([]);
     setSanctuary([]);
+    setChallenges([]);
+  };
+
+  // --- Logic: Challenge Updates ---
+
+  const updateChallengeProgress = (type: ChallengeType, amount: number = 1, detail?: string) => {
+    let leveledUp = false;
+
+    setChallenges(prev => prev.map(ch => {
+        if (ch.completed) return ch;
+        if (ch.type !== type) return ch;
+
+        // Validation for specific types
+        if (ch.type === 'collect_crystal') {
+            if (ch.targetDetail && detail && ch.targetDetail !== detail) {
+                return ch; // Wrong crystal type
+            }
+        }
+        
+        if (ch.type === 'specific_task') {
+             if (ch.targetDetail && detail && ch.targetDetail !== detail) {
+                return ch; // Wrong task
+             }
+        }
+
+        const newProgress = Math.min(ch.currentProgress + amount, ch.target);
+        const isCompleted = newProgress >= ch.target;
+        
+        if (isCompleted && !ch.completed) {
+            leveledUp = true;
+        }
+
+        return {
+            ...ch,
+            currentProgress: newProgress,
+            completed: isCompleted
+        };
+    }));
+
+    if (leveledUp) {
+        triggerCelebration();
+    }
   };
 
   // --- Business Logic ---
@@ -156,7 +330,11 @@ export default function App() {
     setTasks(prev => prev.map(t => {
       if (t.id === id) {
         const willBeCompleted = !t.completed;
-        if (willBeCompleted) triggerCelebration();
+        if (willBeCompleted) {
+             triggerCelebration();
+             updateChallengeProgress('task_count', 1);
+             updateChallengeProgress('specific_task', 1, id.toString());
+        }
         
         setStats(curr => ({
           ...curr,
@@ -173,7 +351,10 @@ export default function App() {
     setTodos(prev => prev.map(t => {
       if (t.id === id) {
         const willBeCompleted = !t.completed;
-        if (willBeCompleted) triggerCelebration();
+        if (willBeCompleted) {
+            triggerCelebration();
+            updateChallengeProgress('task_count', 1);
+        }
 
         setStats(curr => ({
           ...curr,
@@ -218,6 +399,11 @@ export default function App() {
       ...curr,
       focusSessionsCompleted: curr.focusSessionsCompleted + 1
     }));
+
+    // Update challenges
+    updateChallengeProgress('session_count', 1);
+    updateChallengeProgress('focus_minutes', 25); 
+    updateChallengeProgress('collect_crystal', 1, crystalType);
   };
 
   const getTimeGreeting = () => {
@@ -294,7 +480,7 @@ export default function App() {
             { id: 'timeline', icon: CalendarDays, label: 'Timeline' },
             { id: 'focus', icon: Timer, label: 'Focus Zone' },
             { id: 'todos', icon: ListTodo, label: 'My Lists' },
-            { id: 'achievements', icon: Trophy, label: 'Achievements' },
+            { id: 'achievements', icon: Trophy, label: 'Progress' },
           ].map((item) => {
             const isActive = currentView === item.id;
             const Icon = item.icon;
@@ -348,7 +534,12 @@ export default function App() {
           )}
 
           {currentView === 'achievements' && (
-            <AchievementsList achievements={achievements} sanctuary={sanctuary} />
+            <AchievementsList 
+              achievements={achievements} 
+              sanctuary={sanctuary} 
+              challenges={challenges}
+              streak={streak}
+            />
           )}
         </main>
 

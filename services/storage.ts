@@ -1,6 +1,6 @@
-import { Task, TodoItem, Achievement, UserStats, UserData } from '../types';
+import { Task, TodoItem, Achievement, UserStats, UserData, Challenge, Streak } from '../types';
 
-const DB_KEY = 'flowstate_users_db_v2'; // Bumped version for schema change
+const DB_KEY = 'flowstate_users_db_v4'; // Bumped version for schema change
 const SESSION_KEY = 'flowstate_current_session';
 
 // --- Default Initial Data for New Users ---
@@ -25,6 +25,20 @@ const INITIAL_ACHIEVEMENTS: Achievement[] = [
   { id: 'deep-worker', title: 'Deep Worker', description: 'Complete 3 focus sessions', iconName: 'brain', isUnlocked: false, progress: 0, maxProgress: 3 },
   { id: 'planner', title: 'AI Architect', description: 'Generate a plan using AI', iconName: 'star', isUnlocked: false, progress: 0, maxProgress: 1 },
 ];
+
+// Initial challenges are now more specific but use defaults since we don't know the exact date/task state on first boot
+const INITIAL_CHALLENGES: Challenge[] = [
+  { id: 'daily-crystal', title: 'Crystal Hunter', description: 'Forge an Amethyst today', frequency: 'daily', type: 'collect_crystal', target: 1, currentProgress: 0, completed: false, lastReset: new Date().toISOString(), targetDetail: 'amethyst' },
+  { id: 'daily-task-specific', title: 'Daily Grind', description: 'Complete 3 tasks today', frequency: 'daily', type: 'task_count', target: 3, currentProgress: 0, completed: false, lastReset: new Date().toISOString() },
+  { id: 'weekly-master', title: 'Moon Phase', description: 'Complete 15 tasks this week', frequency: 'weekly', type: 'task_count', target: 15, currentProgress: 0, completed: false, lastReset: new Date().toISOString() },
+  { id: 'weekly-deep', title: 'Deep Week', description: 'Complete 5 focus sessions this week', frequency: 'weekly', type: 'session_count', target: 5, currentProgress: 0, completed: false, lastReset: new Date().toISOString() },
+];
+
+const INITIAL_STREAK: Streak = {
+  current: 0,
+  longest: 0,
+  lastLoginDate: ''
+};
 
 const INITIAL_STATS: UserStats = {
   totalTasksCompleted: 0,
@@ -57,8 +71,12 @@ export const authService = {
 
     if (user && user.password === password) {
       localStorage.setItem(SESSION_KEY, username);
-      // Migration: Ensure sanctuary exists
+      
+      // Data Migration Checks
       if (!user.data.sanctuary) user.data.sanctuary = [];
+      if (!user.data.challenges) user.data.challenges = JSON.parse(JSON.stringify(INITIAL_CHALLENGES));
+      if (!user.data.streak) user.data.streak = { ...INITIAL_STREAK };
+
       return { success: true, data: user.data };
     }
     return { success: false, message: 'Invalid username or password' };
@@ -77,7 +95,9 @@ export const authService = {
         todos: INITIAL_TODOS,
         achievements: INITIAL_ACHIEVEMENTS,
         stats: INITIAL_STATS,
-        sanctuary: [] 
+        sanctuary: [],
+        challenges: INITIAL_CHALLENGES,
+        streak: INITIAL_STREAK
       }
     };
 
@@ -101,7 +121,13 @@ export const authService = {
     if (!username) return null;
     const db = getStorage();
     const data = db.users[username]?.data || null;
-    if (data && !data.sanctuary) data.sanctuary = []; 
+    
+    // Migration checks on load as well
+    if (data) {
+      if (!data.sanctuary) data.sanctuary = [];
+      if (!data.challenges) data.challenges = JSON.parse(JSON.stringify(INITIAL_CHALLENGES));
+      if (!data.streak) data.streak = { ...INITIAL_STREAK };
+    }
     return data;
   },
 
