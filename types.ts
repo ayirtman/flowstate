@@ -50,7 +50,7 @@ export interface UserStats {
 }
 
 // Crystal / Sanctuary Features
-export type CrystalType = 'amethyst' | 'citrine' | 'sapphire' | 'ruby' | 'emerald' | 'diamond';
+export type CrystalType = 'amethyst' | 'citrine' | 'sapphire' | 'ruby' | 'emerald' | 'diamond' | 'obsidian' | 'moonstone';
 
 export interface Crystal {
   id: number;
@@ -90,4 +90,5 @@ export interface UserData {
   sanctuary: Crystal[];
   challenges: Challenge[];
   streak: Streak;
+  isPro: boolean;
 }

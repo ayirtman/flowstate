@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Target, Zap, Brain, Star, Rocket, Lock, Gem, Hexagon, Diamond, Triangle, Flame, Sun, Moon, CheckCircle, Circle, CheckSquare } from 'lucide-react';
+import { Trophy, Target, Zap, Brain, Star, Rocket, Lock, Gem, Hexagon, Diamond, Triangle, Flame, Sun, Moon, CheckCircle, Circle, CheckSquare, Sparkles, ArrowRight } from 'lucide-react';
 import { Achievement, IconName, Crystal, CrystalType, Challenge, Streak } from '../types';
 
 interface AchievementsListProps {
@@ -7,6 +7,7 @@ interface AchievementsListProps {
   sanctuary: Crystal[];
   challenges: Challenge[];
   streak: Streak;
+  onOpenForge: () => void;
 }
 
 const CRYSTAL_CONFIG: Record<CrystalType, { icon: React.FC<any>, color: string }> = {
@@ -15,10 +16,12 @@ const CRYSTAL_CONFIG: Record<CrystalType, { icon: React.FC<any>, color: string }
   sapphire: { icon: Diamond, color: '#3b82f6' },
   ruby: { icon: Gem, color: '#f43f5e' },
   emerald: { icon: Hexagon, color: '#22c55e' },
-  diamond: { icon: Diamond, color: '#94a3b8' }
+  diamond: { icon: Diamond, color: '#94a3b8' },
+  obsidian: { icon: Hexagon, color: '#1f2937' },
+  moonstone: { icon: Circle, color: '#e0f2fe' },
 };
 
-const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanctuary, challenges, streak }) => {
+const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanctuary, challenges, streak, onOpenForge }) => {
   const getIcon = (name: IconName, className: string) => {
     switch (name) {
       case 'trophy': return <Trophy className={className} />;
@@ -112,14 +115,22 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
          
          <div className="relative z-10">
             <div className="flex items-center justify-between mb-2 text-white">
-               <h2 className="text-3xl font-serif font-bold">Flow Sanctuary</h2>
+               <div className="flex items-center gap-4">
+                  <h2 className="text-3xl font-serif font-bold">Flow Sanctuary</h2>
+                  <button 
+                    onClick={onOpenForge}
+                    className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 rounded-full transition-all text-sm font-bold uppercase tracking-wider backdrop-blur-md"
+                  >
+                     <Sparkles size={16} /> Elemental Forge
+                  </button>
+               </div>
                <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-sm">
                   <Gem size={14} />
-                  <span>{sanctuary.length} Crystals Forged</span>
+                  <span>{sanctuary.length} Crystals</span>
                </div>
             </div>
             <p className="text-indigo-200 mb-8 max-w-md">
-              Your collection of crystallized focus moments. Each gem represents a session where you found your flow.
+              Forge higher tier crystals by combining common ones in the Elemental Forge.
             </p>
             
             <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-6 p-4">
@@ -127,7 +138,7 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
                   <div className="col-span-full flex flex-col items-center justify-center py-12 text-indigo-300/50 border-2 border-dashed border-indigo-500/30 rounded-2xl">
                     <Gem className="w-12 h-12 mb-4 opacity-50" />
                     <p>The vault is empty.</p>
-                    <p className="text-sm">Complete a focus session to forge your first crystal.</p>
+                    <p className="text-sm">Focus for at least 25 minutes to forge an Amethyst.</p>
                   </div>
                 ) : (
                   sanctuary.map((crystal, i) => {
@@ -149,12 +160,13 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
                                  fill: `${Conf.color}40`
                               }} 
                            />
-                           {/* Shine effect */}
                            <div className="absolute inset-0 bg-white/20 blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
-                        <div className="absolute -bottom-8 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-20 pointer-events-none">
-                           {new Date(crystal.forgedAt).toLocaleDateString()}
-                        </div>
+                        {crystal.type === 'obsidian' || crystal.type === 'moonstone' ? (
+                          <div className="absolute -top-1 -right-1 text-yellow-300 drop-shadow-md">
+                              <Sparkles size={12} fill="currentColor" />
+                          </div>
+                        ) : null}
                       </div>
                     );
                   })
@@ -206,7 +218,6 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
                 {achievement.description}
               </p>
 
-              {/* Progress Bar for the card */}
               <div className="mt-auto">
                 <div className="flex justify-between text-xs font-semibold text-gray-400 mb-1.5">
                   <span>Progress</span>
@@ -219,10 +230,6 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
                   />
                 </div>
               </div>
-              
-              {achievement.isUnlocked && (
-                 <div className="absolute inset-0 rounded-[24px] ring-2 ring-primary/20 pointer-events-none" />
-              )}
             </div>
           ))}
         </div>

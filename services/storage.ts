@@ -1,6 +1,6 @@
 import { Task, TodoItem, Achievement, UserStats, UserData, Challenge, Streak } from '../types';
 
-const DB_KEY = 'flowstate_users_db_v4'; // Bumped version for schema change
+const DB_KEY = 'flowstate_users_db_v5'; // Bumped version for schema change (isPro)
 const SESSION_KEY = 'flowstate_current_session';
 
 // --- Default Initial Data for New Users ---
@@ -76,6 +76,7 @@ export const authService = {
       if (!user.data.sanctuary) user.data.sanctuary = [];
       if (!user.data.challenges) user.data.challenges = JSON.parse(JSON.stringify(INITIAL_CHALLENGES));
       if (!user.data.streak) user.data.streak = { ...INITIAL_STREAK };
+      if (user.data.isPro === undefined) user.data.isPro = false;
 
       return { success: true, data: user.data };
     }
@@ -97,7 +98,8 @@ export const authService = {
         stats: INITIAL_STATS,
         sanctuary: [],
         challenges: INITIAL_CHALLENGES,
-        streak: INITIAL_STREAK
+        streak: INITIAL_STREAK,
+        isPro: false
       }
     };
 
@@ -127,6 +129,7 @@ export const authService = {
       if (!data.sanctuary) data.sanctuary = [];
       if (!data.challenges) data.challenges = JSON.parse(JSON.stringify(INITIAL_CHALLENGES));
       if (!data.streak) data.streak = { ...INITIAL_STREAK };
+      if (data.isPro === undefined) data.isPro = false;
     }
     return data;
   },
