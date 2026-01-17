@@ -1,5 +1,5 @@
 import React from 'react';
-import { Trophy, Target, Zap, Brain, Star, Rocket, Lock, Gem, Hexagon, Diamond, Triangle, Flame, Sun, Moon, CheckCircle, Circle, CheckSquare, Sparkles, ArrowRight } from 'lucide-react';
+import { Trophy, Target, Zap, Brain, Star, Rocket, Lock, Gem, Hexagon, Diamond, Triangle, Flame, Sun, Moon, CheckCircle, Circle, CheckSquare, Sparkles, Gift } from 'lucide-react';
 import { Achievement, IconName, Crystal, CrystalType, Challenge, Streak } from '../types';
 
 interface AchievementsListProps {
@@ -8,6 +8,7 @@ interface AchievementsListProps {
   challenges: Challenge[];
   streak: Streak;
   onOpenForge: () => void;
+  onClaimChallenge: (id: string) => void;
 }
 
 const CRYSTAL_CONFIG: Record<CrystalType, { icon: React.FC<any>, color: string }> = {
@@ -16,12 +17,11 @@ const CRYSTAL_CONFIG: Record<CrystalType, { icon: React.FC<any>, color: string }
   sapphire: { icon: Diamond, color: '#3b82f6' },
   ruby: { icon: Gem, color: '#f43f5e' },
   emerald: { icon: Hexagon, color: '#22c55e' },
-  diamond: { icon: Diamond, color: '#94a3b8' },
   obsidian: { icon: Hexagon, color: '#1f2937' },
   moonstone: { icon: Circle, color: '#e0f2fe' },
 };
 
-const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanctuary, challenges, streak, onOpenForge }) => {
+const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanctuary, challenges, streak, onOpenForge, onClaimChallenge }) => {
   const getIcon = (name: IconName, className: string) => {
     switch (name) {
       case 'trophy': return <Trophy className={className} />;
@@ -34,71 +34,80 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
     }
   };
 
-  const getChallengeIcon = (challenge: Challenge) => {
-      if (challenge.type === 'collect_crystal' && challenge.targetDetail) {
-          const type = challenge.targetDetail as CrystalType;
-          const conf = CRYSTAL_CONFIG[type];
-          if (conf) {
-              const Icon = conf.icon;
-              return <Icon size={20} color={conf.color} fill={`${conf.color}40`} />;
-          }
+  const getTierColor = (tier: string) => {
+      switch(tier) {
+          case 'bronze': return 'from-orange-700 to-orange-500';
+          case 'silver': return 'from-gray-400 to-gray-300';
+          case 'gold': return 'from-yellow-500 to-yellow-300';
+          case 'platinum': return 'from-cyan-500 to-cyan-300';
+          case 'diamond': return 'from-purple-500 to-pink-500';
+          default: return 'from-gray-200 to-gray-100';
       }
-      if (challenge.type === 'specific_task') {
-          return <CheckSquare size={20} />;
-      }
-      
-      return challenge.frequency === 'daily' ? <Sun size={20} /> : <Moon size={20} />;
   };
 
-  const unlockedCount = achievements.filter(a => a.isUnlocked).length;
-  const totalCount = achievements.length;
-
+  const unlockedCount = achievements.filter(a => a.tier !== 'bronze' || a.progress > 0).length; // Rough metric
+  
   return (
-    <div className="max-w-5xl mx-auto animate-slide-up space-y-8">
+    <div className="max-w-5xl mx-auto animate-slide-up space-y-6 md:space-y-8 pb-20">
       
       {/* Top Row: Streak & Daily Rituals */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
           {/* Streak Card */}
-          <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-3xl p-6 text-white shadow-xl shadow-orange-500/20 relative overflow-hidden flex flex-col items-center justify-center text-center">
-             <div className="absolute top-0 right-0 p-4 opacity-20">
+          <div className="bg-gradient-to-br from-orange-500 to-red-500 rounded-[32px] p-6 text-white shadow-xl shadow-orange-500/20 relative overflow-hidden flex flex-row md:flex-col items-center justify-between md:justify-center text-center">
+             <div className="absolute top-0 right-0 p-4 opacity-20 pointer-events-none">
                 <Flame size={80} />
              </div>
-             <Flame size={48} className="mb-2 animate-pulse" />
-             <div className="text-5xl font-bold mb-1">{streak.current}</div>
-             <div className="text-orange-100 font-medium uppercase tracking-wider text-sm">Day Streak</div>
-             <div className="mt-4 text-xs bg-black/20 px-3 py-1 rounded-full">Longest: {streak.longest} days</div>
+             <div className="flex items-center gap-4 md:block text-left md:text-center">
+                <div className="bg-white/20 p-3 rounded-full w-fit mb-0 md:mb-2 backdrop-blur-sm">
+                    <Flame size={28} className="animate-pulse text-white" />
+                </div>
+                <div>
+                    <div className="text-4xl md:text-5xl font-bold leading-none">{streak.current}</div>
+                    <div className="text-orange-100 font-medium uppercase tracking-wider text-xs md:text-sm mt-1">Day Streak</div>
+                </div>
+             </div>
           </div>
 
           {/* Active Rituals */}
-          <div className="md:col-span-2 bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
-             <h3 className="text-xl font-serif font-bold text-gray-800 mb-4 flex items-center gap-2">
+          <div className="md:col-span-2 bg-white rounded-[32px] p-6 shadow-sm border border-gray-100">
+             <h3 className="text-lg md:text-xl font-serif font-bold text-gray-800 mb-4 flex items-center gap-2">
                 <Sun className="text-orange-400" /> Active Rituals
              </h3>
-             <div className="space-y-4">
-                {challenges.filter(c => !c.completed).slice(0, 3).map((challenge) => (
-                    <div key={challenge.id} className="flex items-center gap-4 p-3 rounded-2xl bg-gray-50/50 hover:bg-gray-50 transition-colors">
-                        <div className={`p-3 rounded-xl ${challenge.frequency === 'daily' ? 'bg-orange-100 text-orange-600' : 'bg-indigo-100 text-indigo-600'}`}>
-                            {getChallengeIcon(challenge)}
-                        </div>
-                        <div className="flex-1">
-                            <div className="flex justify-between mb-1">
-                                <span className="font-semibold text-gray-700">{challenge.title}</span>
-                                <span className="text-xs font-bold text-gray-400">{challenge.currentProgress}/{challenge.target}</span>
+             <div className="space-y-3">
+                {challenges.filter(c => !c.claimed).slice(0, 3).map((challenge) => (
+                    <div key={challenge.id} className="flex items-center gap-3 p-3 rounded-2xl bg-gray-50/50 hover:bg-gray-50 transition-colors">
+                        <div className="flex-1 min-w-0">
+                            <div className="flex justify-between mb-1 items-baseline">
+                                <span className="font-semibold text-gray-700 text-sm truncate mr-2">{challenge.title}</span>
+                                <span className="text-xs font-bold text-gray-400 shrink-0">{challenge.currentProgress}/{challenge.target}</span>
                             </div>
-                            <div className="text-xs text-gray-500 mb-2">{challenge.description}</div>
-                            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+                            <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden mb-2">
                                 <div 
-                                    className={`h-full rounded-full ${challenge.frequency === 'daily' ? 'bg-orange-400' : 'bg-indigo-400'} transition-all duration-500`}
-                                    style={{ width: `${(challenge.currentProgress / challenge.target) * 100}%` }}
+                                    className={`h-full rounded-full ${challenge.completed ? 'bg-green-500' : 'bg-orange-400'} transition-all duration-500`}
+                                    style={{ width: `${Math.min((challenge.currentProgress / challenge.target) * 100, 100)}%` }}
                                 />
                             </div>
                         </div>
+                        
+                        {/* Claim Button Logic */}
+                        {challenge.completed ? (
+                             <button 
+                                onClick={() => onClaimChallenge(challenge.id)}
+                                className="px-3 py-1.5 bg-green-500 text-white text-xs font-bold rounded-lg shadow-md hover:bg-green-600 transition-transform active:scale-95 flex items-center gap-1 animate-pulse"
+                             >
+                                 <Gift size={14} /> Claim
+                             </button>
+                        ) : (
+                             <div className="px-3 py-1.5 bg-gray-200 text-gray-400 text-xs font-bold rounded-lg">
+                                 {challenge.rewardDust} Dust
+                             </div>
+                        )}
                     </div>
                 ))}
-                {challenges.every(c => c.completed) && (
+                {challenges.every(c => c.claimed) && (
                     <div className="text-center py-6 text-green-500 font-medium flex flex-col items-center gap-2">
                         <CheckCircle size={32} />
-                        All rituals completed for now!
+                        All rituals completed & claimed!
                     </div>
                 )}
              </div>
@@ -106,39 +115,46 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
       </div>
 
       {/* Sanctuary Section */}
-      <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-3xl p-8 shadow-xl relative overflow-hidden min-h-[300px]">
-         {/* Decorative Background */}
-         <div className="absolute inset-0 opacity-20">
+      <div className="bg-gradient-to-br from-slate-900 to-indigo-950 rounded-[32px] p-6 md:p-8 shadow-xl relative overflow-hidden min-h-[300px]">
+         <div className="absolute inset-0 opacity-20 pointer-events-none">
             <div className="absolute top-10 left-10 w-32 h-32 bg-purple-500 rounded-full blur-[80px]" />
             <div className="absolute bottom-10 right-10 w-40 h-40 bg-blue-500 rounded-full blur-[80px]" />
          </div>
          
          <div className="relative z-10">
-            <div className="flex items-center justify-between mb-2 text-white">
-               <div className="flex items-center gap-4">
-                  <h2 className="text-3xl font-serif font-bold">Flow Sanctuary</h2>
-                  <button 
+            <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
+               <div>
+                  <h2 className="text-2xl md:text-3xl font-serif font-bold text-white mb-1">Flow Sanctuary</h2>
+                  <p className="text-indigo-200 text-sm">Forge higher tier crystals in the Elemental Forge.</p>
+               </div>
+               
+               <div className="flex items-center gap-3">
+                   <div className="bg-white/10 backdrop-blur-md px-3 py-2 rounded-xl text-white text-xs font-bold flex items-center gap-2 border border-white/5">
+                      <Gem size={14} className="text-indigo-300" />
+                      {sanctuary.length}
+                   </div>
+                   <button 
                     onClick={onOpenForge}
-                    className="flex items-center gap-2 px-4 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-300 border border-yellow-500/50 rounded-full transition-all text-sm font-bold uppercase tracking-wider backdrop-blur-md"
+                    className="flex-1 md:flex-none flex items-center justify-center gap-2 px-5 py-2 bg-gradient-to-r from-yellow-600 to-amber-500 hover:to-amber-400 text-white rounded-xl shadow-lg shadow-amber-900/20 transition-all active:scale-95 text-sm font-bold uppercase tracking-wide"
                   >
-                     <Sparkles size={16} /> Elemental Forge
+                     <Sparkles size={16} /> Forge
                   </button>
                </div>
-               <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-sm">
-                  <Gem size={14} />
-                  <span>{sanctuary.length} Crystals</span>
-               </div>
             </div>
-            <p className="text-indigo-200 mb-8 max-w-md">
-              Forge higher tier crystals by combining common ones in the Elemental Forge.
-            </p>
             
-            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-6 p-4">
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 gap-4 md:gap-6 p-4 bg-black/20 rounded-3xl min-h-[200px] border border-white/5">
                 {sanctuary.length === 0 ? (
-                  <div className="col-span-full flex flex-col items-center justify-center py-12 text-indigo-300/50 border-2 border-dashed border-indigo-500/30 rounded-2xl">
-                    <Gem className="w-12 h-12 mb-4 opacity-50" />
-                    <p>The vault is empty.</p>
-                    <p className="text-sm">Focus for at least 25 minutes to forge an Amethyst.</p>
+                  <div className="col-span-full flex flex-col items-center justify-center text-indigo-300/40 py-8 relative">
+                    <div className="relative z-10 flex flex-col items-center">
+                        <div className="w-24 h-24 relative mb-4 flex items-center justify-center">
+                             {/* Ghost Moonstone */}
+                             <div className="absolute inset-0 border-4 border-dashed border-indigo-500/20 rounded-full animate-pulse-soft"></div>
+                             <Circle size={48} className="text-indigo-500/10" fill="currentColor" />
+                             <Lock size={16} className="absolute text-indigo-400/30" />
+                        </div>
+                        <p className="font-medium">The vault is empty.</p>
+                        <p className="text-xs mt-1 max-w-[200px] text-center text-indigo-400">Mine Amethysts in the Focus Zone to begin your journey.</p>
+                    </div>
                   </div>
                 ) : (
                   sanctuary.map((crystal, i) => {
@@ -154,7 +170,7 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
                         <div className="relative">
                            <Icon 
                               size={32} 
-                              className="drop-shadow-[0_0_10px_rgba(255,255,255,0.5)]"
+                              className="drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] md:w-10 md:h-10"
                               style={{ 
                                  stroke: Conf.color,
                                  fill: `${Conf.color}40`
@@ -162,11 +178,6 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
                            />
                            <div className="absolute inset-0 bg-white/20 blur-sm rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
                         </div>
-                        {crystal.type === 'obsidian' || crystal.type === 'moonstone' ? (
-                          <div className="absolute -top-1 -right-1 text-yellow-300 drop-shadow-md">
-                              <Sparkles size={12} fill="currentColor" />
-                          </div>
-                        ) : null}
                       </div>
                     );
                   })
@@ -175,63 +186,67 @@ const AchievementsList: React.FC<AchievementsListProps> = ({ achievements, sanct
          </div>
       </div>
 
-      {/* Achievements Grid */}
+      {/* Badges Grid */}
       <div>
-        <div className="flex items-center justify-between mb-6 px-2">
-          <h2 className="text-2xl font-serif font-bold text-gray-800">Trophies</h2>
-          <span className="text-primary font-bold bg-purple-50 px-4 py-2 rounded-full text-sm">
-            {unlockedCount} / {totalCount} Unlocked
-          </span>
+        <div className="flex items-center justify-between mb-4 px-2">
+          <h2 className="text-xl md:text-2xl font-serif font-bold text-gray-800">Milestones</h2>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {achievements.map((achievement, idx) => (
-            <div
-              key={achievement.id}
-              style={{ animationDelay: `${idx * 0.1}s` }}
-              className={`
-                relative p-6 rounded-[24px] border-2 transition-all duration-300 animate-slide-up group
-                ${achievement.isUnlocked 
-                  ? 'bg-white border-purple-100 shadow-lg shadow-purple-100/50 hover:-translate-y-1' 
-                  : 'bg-gray-50 border-gray-100 opacity-80 hover:opacity-100'}
-              `}
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className={`
-                  p-3 rounded-2xl 
-                  ${achievement.isUnlocked 
-                    ? 'bg-gradient-to-br from-primary to-secondary text-white shadow-lg shadow-primary/30' 
-                    : 'bg-gray-200 text-gray-400'}
-                `}>
-                  {getIcon(achievement.iconName, "w-6 h-6")}
-                </div>
-                {!achievement.isUnlocked && (
-                  <Lock className="w-5 h-5 text-gray-300" />
-                )}
-              </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+          {achievements.map((achievement, idx) => {
+            const isUnlocked = achievement.level > 1 || achievement.progress > 0;
+            const progressPercent = Math.min((achievement.progress / achievement.maxProgress) * 100, 100);
 
-              <h3 className={`text-lg font-bold mb-2 ${achievement.isUnlocked ? 'text-gray-800' : 'text-gray-500'}`}>
-                {achievement.title}
-              </h3>
-              
-              <p className="text-sm text-gray-500 mb-4 h-10 leading-snug">
-                {achievement.description}
-              </p>
-
-              <div className="mt-auto">
-                <div className="flex justify-between text-xs font-semibold text-gray-400 mb-1.5">
-                  <span>Progress</span>
-                  <span>{Math.min(achievement.progress, achievement.maxProgress)} / {achievement.maxProgress}</span>
+            return (
+              <div
+                key={achievement.id}
+                style={{ animationDelay: `${idx * 0.1}s` }}
+                className={`
+                  relative p-5 md:p-6 rounded-[24px] border-2 transition-all duration-300 animate-slide-up
+                  ${isUnlocked ? 'bg-white border-purple-100' : 'bg-gray-50 border-gray-100 opacity-60 grayscale'}
+                `}
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className={`p-4 rounded-full bg-gradient-to-br ${getTierColor(achievement.tier)} shadow-lg text-white relative overflow-hidden`}>
+                     <div className="absolute inset-0 bg-white/20 blur-sm"></div>
+                     <div className="relative z-10">
+                        {getIcon(achievement.iconName, "w-6 h-6")}
+                     </div>
+                  </div>
+                  <div className="text-right">
+                      <div className="text-xs font-bold uppercase text-gray-400 tracking-wider mb-1">{achievement.tier}</div>
+                      
+                      {/* 5-Pip Level Visual */}
+                      <div className="flex gap-1 justify-end">
+                          {[1, 2, 3, 4, 5].map(lvl => (
+                              <div 
+                                key={lvl} 
+                                className={`w-1.5 h-3 rounded-full ${lvl <= achievement.level ? 'bg-purple-500' : 'bg-gray-200'}`} 
+                              />
+                          ))}
+                      </div>
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full rounded-full transition-all duration-500 ${achievement.isUnlocked ? 'bg-primary' : 'bg-gray-300'}`}
-                    style={{ width: `${Math.min((achievement.progress / achievement.maxProgress) * 100, 100)}%` }}
-                  />
+
+                <h3 className="text-lg font-bold text-gray-800 mb-1">{achievement.title}</h3>
+                <p className="text-sm text-gray-500 mb-4">{achievement.description}</p>
+
+                {/* Progress Bar for Current Tier */}
+                <div>
+                  <div className="flex justify-between text-xs font-bold text-gray-400 mb-1.5">
+                    <span>{achievement.progress} / {achievement.maxProgress}</span>
+                    <span>{progressPercent.toFixed(0)}%</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-500 bg-gradient-to-r ${getTierColor(achievement.tier)}`}
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

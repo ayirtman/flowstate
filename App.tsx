@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { CalendarDays, Timer, ListTodo, Sparkles, Trophy, LogOut } from 'lucide-react';
+import { CalendarDays, Timer, ListTodo, Sparkles, Trophy, LogOut, Plus } from 'lucide-react';
 
 import TaskCard from './components/TaskCard';
 import FocusTimer from './components/FocusTimer';
@@ -10,8 +10,9 @@ import Celebration from './components/Celebration';
 import AuthScreen from './components/AuthScreen';
 import SubscriptionModal from './components/SubscriptionModal';
 import CraftingModal from './components/CraftingModal';
+import TaskModal from './components/TaskModal';
 
-import { Task, TodoItem, ViewState, GeneratedTask, Achievement, UserStats, UserData, Crystal, CrystalType, Challenge, Streak, ChallengeType } from './types';
+import { Task, TodoItem, ViewState, GeneratedTask, Achievement, UserStats, UserData, Crystal, CrystalType, Challenge, Streak, ChallengeType, TodoPriority } from './types';
 import { authService } from './services/storage';
 
 export default function App() {
@@ -28,16 +29,20 @@ export default function App() {
   const [sanctuary, setSanctuary] = useState<Crystal[]>([]);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [streak, setStreak] = useState<Streak>({ current: 0, longest: 0, lastLoginDate: '' });
+  const [blockedApps, setBlockedApps] = useState<string[]>([]);
   const [stats, setStats] = useState<UserStats>({
     totalTasksCompleted: 0,
     focusSessionsCompleted: 0,
-    aiPlansGenerated: 0
+    aiPlansGenerated: 0,
+    focusDust: 0
   });
 
   const [showAIModal, setShowAIModal] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   const [showCraftingModal, setShowCraftingModal] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
 
   // --- Initialization & Auth ---
 
@@ -57,10 +62,10 @@ export default function App() {
   useEffect(() => {
     if (currentUser && !isLoading) {
       authService.saveUserData({
-        tasks, todos, achievements, stats, sanctuary, challenges, streak, isPro
+        tasks, todos, achievements, stats, sanctuary, challenges, streak, isPro, blockedApps
       });
     }
-  }, [tasks, todos, achievements, stats, sanctuary, challenges, streak, isPro, currentUser, isLoading]);
+  }, [tasks, todos, achievements, stats, sanctuary, challenges, streak, isPro, blockedApps, currentUser, isLoading]);
 
   const loadDataIntoState = (data: UserData) => {
     setTasks(data.tasks);
@@ -71,6 +76,7 @@ export default function App() {
     setChallenges(data.challenges || []);
     setStreak(data.streak || { current: 0, longest: 0, lastLoginDate: '' });
     setIsPro(data.isPro || false);
+    setBlockedApps(data.blockedApps || []);
   };
 
   // --- Logic: Date & Streaks ---
@@ -93,8 +99,10 @@ export default function App() {
           target: 1,
           currentProgress: 0,
           completed: false,
+          claimed: false,
           lastReset: today,
-          targetDetail: randomCrystal
+          targetDetail: randomCrystal,
+          rewardDust: 20
       };
 
       const taskChallenge: Challenge = randomTask ? {
@@ -106,8 +114,10 @@ export default function App() {
           target: 1,
           currentProgress: 0,
           completed: false,
+          claimed: false,
           lastReset: today,
-          targetDetail: randomTask.id.toString()
+          targetDetail: randomTask.id.toString(),
+          rewardDust: 15
       } : {
           id: 'daily-task-generic',
           title: 'Daily Grind',
@@ -117,7 +127,9 @@ export default function App() {
           target: 3,
           currentProgress: 0,
           completed: false,
-          lastReset: today
+          claimed: false,
+          lastReset: today,
+          rewardDust: 10
       };
 
       return [crystalChallenge, taskChallenge];
@@ -159,20 +171,7 @@ export default function App() {
         newDailyChallenges = generateNewDailyChallenges(data.tasks);
     }
 
-    const processedOtherChallenges = otherChallenges.map(ch => {
-        if (ch.frequency === 'weekly') {
-            const lastReset = new Date(ch.lastReset);
-            const diffTime = Math.abs(today.getTime() - lastReset.getTime());
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-            
-            if ((today.getDay() === 1 && todayStr !== lastReset.toISOString().split('T')[0]) || diffDays > 7) {
-                 return { ...ch, currentProgress: 0, completed: false, lastReset: today.toISOString() };
-            }
-        }
-        return ch;
-    });
-
-    return { ...data, streak: newStreak, challenges: [...newDailyChallenges, ...processedOtherChallenges] };
+    return { ...data, streak: newStreak, challenges: [...newDailyChallenges, ...otherChallenges] };
   };
 
   const handleLoginSuccess = (username: string, data: UserData) => {
@@ -184,7 +183,7 @@ export default function App() {
   const handleLogout = () => {
     authService.logout();
     setCurrentUser(null);
-    setTasks([]); setTodos([]); setAchievements([]); setSanctuary([]); setChallenges([]); setIsPro(false);
+    setTasks([]); setTodos([]); setAchievements([]); setSanctuary([]); setChallenges([]); setIsPro(false); setBlockedApps([]);
   };
 
   // --- Handlers ---
@@ -195,7 +194,6 @@ export default function App() {
           newSanctuary.splice(moonstoneIndex, 1);
           setSanctuary(newSanctuary);
       }
-      
       setIsPro(true);
       setShowSubscriptionModal(false);
       triggerCelebration();
@@ -216,13 +214,11 @@ export default function App() {
     setSanctuary(newSanctuary);
     triggerCelebration();
     
-    if (resultType === 'moonstone') {
-        updateChallengeProgress('collect_crystal', 1, 'moonstone');
-    }
+    // Check achievements for crafting
+    updateChallengeProgress('collect_crystal', 1, resultType);
   };
 
   const updateChallengeProgress = (type: ChallengeType, amount: number = 1, detail?: string) => {
-    let leveledUp = false;
     setChallenges(prev => prev.map(ch => {
         if (ch.completed) return ch;
         if (ch.type !== type) return ch;
@@ -231,10 +227,17 @@ export default function App() {
 
         const newProgress = Math.min(ch.currentProgress + amount, ch.target);
         const isCompleted = newProgress >= ch.target;
-        if (isCompleted && !ch.completed) leveledUp = true;
         return { ...ch, currentProgress: newProgress, completed: isCompleted };
     }));
-    if (leveledUp) triggerCelebration();
+  };
+
+  const handleClaimChallenge = (id: string) => {
+      const challenge = challenges.find(c => c.id === id);
+      if (challenge && challenge.completed && !challenge.claimed) {
+          triggerCelebration();
+          setStats(s => ({ ...s, focusDust: s.focusDust + challenge.rewardDust }));
+          setChallenges(prev => prev.map(c => c.id === id ? { ...c, claimed: true } : c));
+      }
   };
 
   const triggerCelebration = () => {
@@ -242,35 +245,67 @@ export default function App() {
     setTimeout(() => setShowCelebration(false), 2500);
   };
 
+  // Check achievements - run silently on stat updates
   useEffect(() => {
     if (!currentUser) return;
-    let hasNewUnlock = false;
     const updatedAchievements = achievements.map(achievement => {
-      let newProgress = achievement.progress;
+      let currentMetric = 0;
       switch (achievement.id) {
-        case 'first-step': newProgress = stats.totalTasksCompleted; break;
-        case 'momentum': newProgress = stats.totalTasksCompleted; break;
-        case 'task-master': newProgress = stats.totalTasksCompleted; break;
-        case 'focus-novice': newProgress = stats.focusSessionsCompleted; break;
-        case 'deep-worker': newProgress = stats.focusSessionsCompleted; break;
-        case 'planner': newProgress = stats.aiPlansGenerated; break;
+        case 'first-step': currentMetric = stats.totalTasksCompleted; break;
+        case 'momentum': currentMetric = streak.current; break;
+        case 'focus-novice': currentMetric = Math.floor(stats.focusSessionsCompleted * 25); break; // Rough estimate usage
+        case 'crystal-collector': currentMetric = sanctuary.length; break;
+        case 'planner': currentMetric = stats.aiPlansGenerated; break;
       }
-      const isNowUnlocked = newProgress >= achievement.maxProgress;
-      if (!achievement.isUnlocked && isNowUnlocked) hasNewUnlock = true;
-      return { ...achievement, progress: newProgress, isUnlocked: achievement.isUnlocked || isNowUnlocked };
+
+      // Check tier upgrades
+      if (currentMetric >= achievement.maxProgress && achievement.level < 5) {
+          return { 
+              ...achievement, 
+              level: achievement.level + 1, 
+              tier: ['bronze', 'silver', 'gold', 'platinum', 'diamond'][achievement.level] as any,
+              progress: 0,
+              maxProgress: achievement.maxProgress * 2 
+          };
+      }
+      return { ...achievement, progress: currentMetric };
     });
+    
     if (JSON.stringify(updatedAchievements) !== JSON.stringify(achievements)) {
       setAchievements(updatedAchievements);
-      if (hasNewUnlock) triggerCelebration();
     }
-  }, [stats, achievements, currentUser]);
+  }, [stats, streak, sanctuary, achievements, currentUser]);
+
+  // --- Task & Todo CRUD Logic ---
+
+  const handleSaveTask = (taskData: Omit<Task, 'id' | 'completed'>) => {
+    if (editingTask) {
+        setTasks(prev => prev.map(t => t.id === editingTask.id ? { ...t, ...taskData } : t));
+    } else {
+        const newTask: Task = {
+            id: Date.now(),
+            completed: false,
+            ...taskData
+        };
+        setTasks(prev => [...prev, newTask].sort((a, b) => a.time.localeCompare(b.time)));
+    }
+    setEditingTask(null);
+  };
+
+  const handleDeleteTask = (id: number) => {
+      setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  const handleEditTask = (task: Task) => {
+      setEditingTask(task);
+      setShowTaskModal(true);
+  };
 
   const handleToggleTask = (id: number) => {
     setTasks(prev => prev.map(t => {
       if (t.id === id) {
         const willBeCompleted = !t.completed;
         if (willBeCompleted) {
-             triggerCelebration();
              updateChallengeProgress('task_count', 1);
              updateChallengeProgress('specific_task', 1, id.toString());
         }
@@ -281,12 +316,26 @@ export default function App() {
     }));
   };
 
+  const handleAddTodo = (title: string, priority: TodoPriority) => {
+      const newTodo: TodoItem = {
+          id: Date.now(),
+          title,
+          emoji: '📌', // Default emoji for quick add
+          priority,
+          completed: false
+      };
+      setTodos(prev => [newTodo, ...prev]);
+  };
+
+  const handleDeleteTodo = (id: number) => {
+      setTodos(prev => prev.filter(t => t.id !== id));
+  };
+
   const handleToggleTodo = (id: number) => {
     setTodos(prev => prev.map(t => {
       if (t.id === id) {
         const willBeCompleted = !t.completed;
         if (willBeCompleted) {
-            triggerCelebration();
             updateChallengeProgress('task_count', 1);
         }
         setStats(curr => ({ ...curr, totalTasksCompleted: willBeCompleted ? curr.totalTasksCompleted + 1 : curr.totalTasksCompleted - 1 }));
@@ -302,17 +351,40 @@ export default function App() {
     }));
     setTodos(prev => [...prev, ...newTodos]);
     setCurrentView('todos');
-    setStats(curr => ({ ...curr, aiPlansGenerated: curr.aiPlansGenerated + 1 }));
+    setStats(curr => ({ 
+        ...curr, 
+        aiPlansGenerated: curr.aiPlansGenerated + 1,
+        focusDust: curr.focusDust - 5 // COST
+    }));
   };
 
-  const handleFocusSessionComplete = (crystalType: CrystalType) => {
+  const handleFocusSessionComplete = (result: { crystal: CrystalType | null; dust: number; duration: number }) => {
     triggerCelebration();
-    const newCrystal: Crystal = { id: Date.now(), type: crystalType, forgedAt: Date.now() };
-    setSanctuary(prev => [newCrystal, ...prev]);
-    setStats(curr => ({ ...curr, focusSessionsCompleted: curr.focusSessionsCompleted + 1 }));
+    
+    // Award Crystal
+    if (result.crystal) {
+        const newCrystal: Crystal = { id: Date.now(), type: result.crystal, forgedAt: Date.now() };
+        setSanctuary(prev => [newCrystal, ...prev]);
+        updateChallengeProgress('collect_crystal', 1, result.crystal);
+    }
+    
+    // Award Dust
+    setStats(curr => ({ 
+        ...curr, 
+        focusSessionsCompleted: curr.focusSessionsCompleted + 1,
+        focusDust: curr.focusDust + result.dust
+    }));
+
     updateChallengeProgress('session_count', 1);
-    updateChallengeProgress('focus_minutes', 25); 
-    updateChallengeProgress('collect_crystal', 1, crystalType);
+    updateChallengeProgress('focus_minutes', result.duration); 
+  };
+
+  const handleOpenAI = () => {
+      if (stats.focusDust < 5) {
+          alert("You need 5 Focus Dust to use AI. Focus for 25 mins to earn more!");
+          return;
+      }
+      setShowAIModal(true);
   };
 
   const currentHour = new Date().getHours();
@@ -351,21 +423,31 @@ export default function App() {
         onUpgrade={handleUpgradeGeneric}
       />
 
+      <TaskModal 
+        isOpen={showTaskModal} 
+        onClose={() => { setShowTaskModal(false); setEditingTask(null); }} 
+        onSave={handleSaveTask}
+        initialTask={editingTask}
+      />
+
       <div className="max-w-7xl mx-auto px-4 py-6 md:px-6 md:py-8 relative z-10">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 md:mb-10 gap-6">
           <div className="flex-1 w-full md:w-auto">
             <h1 className="text-3xl md:text-5xl font-bold font-serif bg-gradient-to-br from-primary to-blue-500 bg-clip-text text-transparent pb-2">
               Good {currentHour < 12 ? 'Morning' : 'Evening'}, {currentUser}
             </h1>
-            <p className="text-gray-500 text-sm md:text-lg">
-              You've completed {tasks.filter(t => t.completed).length + todos.filter(t => t.completed).length} tasks today.
-            </p>
+            <div className="flex items-center gap-4 text-gray-500 text-sm md:text-lg">
+               <span className="flex items-center gap-1 bg-white/50 px-3 py-1 rounded-full border border-white/50">
+                   <Sparkles size={16} className="text-gray-400" />
+                   <span className="font-bold text-gray-600">{stats.focusDust} Dust</span>
+               </span>
+            </div>
           </div>
           
           <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full md:w-auto">
-            <button onClick={() => setShowAIModal(true)} className="group flex-1 md:flex-initial flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl font-semibold shadow-lg shadow-primary/30 hover:-translate-y-0.5 hover:shadow-primary/50 transition-all duration-300">
+            <button onClick={handleOpenAI} className="group flex-1 md:flex-initial flex items-center justify-center gap-2 px-6 py-3.5 bg-gradient-to-r from-primary to-secondary text-white rounded-2xl font-semibold shadow-lg shadow-primary/30 hover:-translate-y-0.5 hover:shadow-primary/50 transition-all duration-300">
               <Sparkles className="w-5 h-5 group-hover:animate-pulse" />
-              <span className="whitespace-nowrap">Smart Breakdown</span>
+              <span className="whitespace-nowrap">Smart Breakdown (5 Dust)</span>
             </button>
             <button onClick={handleLogout} className="p-3.5 bg-white text-gray-400 rounded-2xl hover:bg-red-50 hover:text-red-500 transition-colors shadow-sm flex items-center justify-center"><LogOut className="w-5 h-5" /></button>
           </div>
@@ -387,20 +469,68 @@ export default function App() {
 
         <main className="min-h-[500px]">
           {currentView === 'timeline' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 animate-slide-up">
-              {tasks.length > 0 ? tasks.map((task, index) => <TaskCard key={task.id} task={task} index={index} isActive={index === currentTaskIndex} onToggle={handleToggleTask} />) : (
-                <div className="col-span-full text-center py-20 text-gray-400"><CalendarDays className="w-16 h-16 mx-auto mb-4 opacity-20" /><p className="text-xl font-serif">Your timeline is empty.</p></div>
-              )}
-            </div>
+            <>
+                <div className="flex justify-end mb-4">
+                    <button 
+                        onClick={() => { setEditingTask(null); setShowTaskModal(true); }}
+                        className="flex items-center gap-2 px-4 py-2 bg-white text-primary border border-primary/20 rounded-xl font-bold hover:bg-primary/5 transition-colors shadow-sm"
+                    >
+                        <Plus size={18} /> Add Task
+                    </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6 animate-slide-up">
+                    {tasks.length > 0 ? tasks.map((task, index) => (
+                        <TaskCard 
+                            key={task.id} 
+                            task={task} 
+                            index={index} 
+                            isActive={index === currentTaskIndex} 
+                            onToggle={handleToggleTask} 
+                            onEdit={handleEditTask}
+                            onDelete={handleDeleteTask}
+                        />
+                    )) : (
+                        <div className="col-span-full text-center py-20 text-gray-400">
+                            <CalendarDays className="w-16 h-16 mx-auto mb-4 opacity-20" />
+                            <p className="text-xl font-serif">0 tasks completed.</p>
+                            <p className="text-sm mt-2">Your Forge is waiting to be lit.</p>
+                        </div>
+                    )}
+                </div>
+            </>
           )}
 
           <div className={currentView === 'focus' ? 'block' : 'hidden'}>
-            <FocusTimer onSessionComplete={handleFocusSessionComplete} isPro={isPro} onUpgradeRequest={() => setShowSubscriptionModal(true)} />
+            <FocusTimer 
+                onSessionComplete={handleFocusSessionComplete} 
+                isPro={isPro} 
+                onUpgradeRequest={() => setShowSubscriptionModal(true)} 
+                blockedApps={blockedApps}
+                onUpdateBlockedApps={setBlockedApps}
+                tasks={tasks}
+                sanctuary={sanctuary.map(c => c.type)}
+            />
           </div>
 
-          {currentView === 'todos' && <TodoList items={todos} onToggle={handleToggleTodo} />}
+          {currentView === 'todos' && (
+            <TodoList 
+                items={todos} 
+                onToggle={handleToggleTodo} 
+                onAdd={handleAddTodo}
+                onDelete={handleDeleteTodo}
+            />
+          )}
 
-          {currentView === 'achievements' && <AchievementsList achievements={achievements} sanctuary={sanctuary} challenges={challenges} streak={streak} onOpenForge={() => setShowCraftingModal(true)} />}
+          {currentView === 'achievements' && (
+            <AchievementsList 
+                achievements={achievements} 
+                sanctuary={sanctuary} 
+                challenges={challenges} 
+                streak={streak} 
+                onOpenForge={() => setShowCraftingModal(true)}
+                onClaimChallenge={handleClaimChallenge}
+            />
+          )}
         </main>
       </div>
     </div>

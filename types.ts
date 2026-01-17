@@ -32,25 +32,28 @@ export interface GeneratedTask {
 }
 
 export type IconName = 'trophy' | 'target' | 'zap' | 'brain' | 'star' | 'rocket';
+export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond';
 
 export interface Achievement {
   id: string;
   title: string;
   description: string;
   iconName: IconName;
-  isUnlocked: boolean;
+  tier: AchievementTier;
   progress: number;
-  maxProgress: number;
+  maxProgress: number; // Progress needed for NEXT tier
+  level: number; // 1-5
 }
 
 export interface UserStats {
   totalTasksCompleted: number;
   focusSessionsCompleted: number;
   aiPlansGenerated: number;
+  focusDust: number; // New Currency
 }
 
 // Crystal / Sanctuary Features
-export type CrystalType = 'amethyst' | 'citrine' | 'sapphire' | 'ruby' | 'emerald' | 'diamond' | 'obsidian' | 'moonstone';
+export type CrystalType = 'amethyst' | 'citrine' | 'sapphire' | 'emerald' | 'ruby' | 'obsidian' | 'moonstone';
 
 export interface Crystal {
   id: number;
@@ -71,8 +74,10 @@ export interface Challenge {
   target: number;
   currentProgress: number;
   completed: boolean;
+  claimed: boolean; // New: User must manually claim
   lastReset: string; // ISO Date string
   targetDetail?: string; // e.g., 'amethyst', '101' (taskId), or null
+  rewardDust: number; // XP/Currency reward
 }
 
 export interface Streak {
@@ -91,4 +96,5 @@ export interface UserData {
   challenges: Challenge[];
   streak: Streak;
   isPro: boolean;
+  blockedApps: string[];
 }

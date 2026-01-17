@@ -1,6 +1,6 @@
 import { Task, TodoItem, Achievement, UserStats, UserData, Challenge, Streak } from '../types';
 
-const DB_KEY = 'flowstate_users_db_v5'; // Bumped version for schema change (isPro)
+const DB_KEY = 'flowstate_users_db_v6'; // Bumped version for Dust/Tier schema
 const SESSION_KEY = 'flowstate_current_session';
 
 // --- Default Initial Data for New Users ---
@@ -9,7 +9,6 @@ const INITIAL_TASKS: Task[] = [
   { id: 1, title: 'Morning meditation', emoji: '🧘', time: '08:00', duration: 15, color: '#B4A7D6', completed: false, category: 'wellness' },
   { id: 2, title: 'Check emails', emoji: '📧', time: '09:00', duration: 30, color: '#FFB4A2', completed: false, category: 'work' },
   { id: 3, title: 'Deep work session', emoji: '💻', time: '10:00', duration: 90, color: '#A8D8EA', completed: false, category: 'work' },
-  { id: 4, title: 'Lunch break', emoji: '🍱', time: '12:30', duration: 45, color: '#FFCF96', completed: false, category: 'personal' },
 ];
 
 const INITIAL_TODOS: TodoItem[] = [
@@ -18,20 +17,17 @@ const INITIAL_TODOS: TodoItem[] = [
 ];
 
 const INITIAL_ACHIEVEMENTS: Achievement[] = [
-  { id: 'first-step', title: 'First Step', description: 'Complete your first task', iconName: 'target', isUnlocked: false, progress: 0, maxProgress: 1 },
-  { id: 'momentum', title: 'Gaining Momentum', description: 'Complete 5 total tasks', iconName: 'rocket', isUnlocked: false, progress: 0, maxProgress: 5 },
-  { id: 'task-master', title: 'Task Master', description: 'Complete 10 total tasks', iconName: 'trophy', isUnlocked: false, progress: 0, maxProgress: 10 },
-  { id: 'focus-novice', title: 'Focus Novice', description: 'Complete 1 focus session', iconName: 'zap', isUnlocked: false, progress: 0, maxProgress: 1 },
-  { id: 'deep-worker', title: 'Deep Worker', description: 'Complete 3 focus sessions', iconName: 'brain', isUnlocked: false, progress: 0, maxProgress: 3 },
-  { id: 'planner', title: 'AI Architect', description: 'Generate a plan using AI', iconName: 'star', isUnlocked: false, progress: 0, maxProgress: 1 },
+  { id: 'first-step', title: 'First Step', description: 'Tasks Completed', iconName: 'target', tier: 'bronze', level: 1, progress: 0, maxProgress: 5 },
+  { id: 'momentum', title: 'Gaining Momentum', description: 'Streaks maintained', iconName: 'rocket', tier: 'bronze', level: 1, progress: 0, maxProgress: 3 },
+  { id: 'focus-novice', title: 'Focus Novice', description: 'Total Focus Minutes', iconName: 'zap', tier: 'bronze', level: 1, progress: 0, maxProgress: 60 },
+  { id: 'crystal-collector', title: 'Gemologist', description: 'Crystals Forged', iconName: 'trophy', tier: 'bronze', level: 1, progress: 0, maxProgress: 3 },
+  { id: 'planner', title: 'Architect', description: 'AI Plans Generated', iconName: 'brain', tier: 'bronze', level: 1, progress: 0, maxProgress: 5 },
 ];
 
-// Initial challenges are now more specific but use defaults since we don't know the exact date/task state on first boot
 const INITIAL_CHALLENGES: Challenge[] = [
-  { id: 'daily-crystal', title: 'Crystal Hunter', description: 'Forge an Amethyst today', frequency: 'daily', type: 'collect_crystal', target: 1, currentProgress: 0, completed: false, lastReset: new Date().toISOString(), targetDetail: 'amethyst' },
-  { id: 'daily-task-specific', title: 'Daily Grind', description: 'Complete 3 tasks today', frequency: 'daily', type: 'task_count', target: 3, currentProgress: 0, completed: false, lastReset: new Date().toISOString() },
-  { id: 'weekly-master', title: 'Moon Phase', description: 'Complete 15 tasks this week', frequency: 'weekly', type: 'task_count', target: 15, currentProgress: 0, completed: false, lastReset: new Date().toISOString() },
-  { id: 'weekly-deep', title: 'Deep Week', description: 'Complete 5 focus sessions this week', frequency: 'weekly', type: 'session_count', target: 5, currentProgress: 0, completed: false, lastReset: new Date().toISOString() },
+  { id: 'daily-crystal', title: 'Crystal Hunter', description: 'Forge an Amethyst today', frequency: 'daily', type: 'collect_crystal', target: 1, currentProgress: 0, completed: false, claimed: false, lastReset: new Date().toISOString(), targetDetail: 'amethyst', rewardDust: 10 },
+  { id: 'daily-focus', title: 'Deep Dive', description: 'Focus for 45 minutes total', frequency: 'daily', type: 'focus_minutes', target: 45, currentProgress: 0, completed: false, claimed: false, lastReset: new Date().toISOString(), rewardDust: 15 },
+  { id: 'daily-tasks', title: 'Daily Grind', description: 'Complete 3 tasks', frequency: 'daily', type: 'task_count', target: 3, currentProgress: 0, completed: false, claimed: false, lastReset: new Date().toISOString(), rewardDust: 10 },
 ];
 
 const INITIAL_STREAK: Streak = {
@@ -43,8 +39,11 @@ const INITIAL_STREAK: Streak = {
 const INITIAL_STATS: UserStats = {
   totalTasksCompleted: 0,
   focusSessionsCompleted: 0,
-  aiPlansGenerated: 0
+  aiPlansGenerated: 0,
+  focusDust: 0
 };
+
+const INITIAL_BLOCKED_APPS = ['Instagram', 'TikTok', 'Twitter', 'Facebook'];
 
 // --- Storage Logic ---
 
@@ -77,6 +76,14 @@ export const authService = {
       if (!user.data.challenges) user.data.challenges = JSON.parse(JSON.stringify(INITIAL_CHALLENGES));
       if (!user.data.streak) user.data.streak = { ...INITIAL_STREAK };
       if (user.data.isPro === undefined) user.data.isPro = false;
+      if (!user.data.blockedApps) user.data.blockedApps = INITIAL_BLOCKED_APPS;
+      if (user.data.stats.focusDust === undefined) user.data.stats.focusDust = 0;
+      
+      // Map old achievements to new structure if needed
+      user.data.achievements = user.data.achievements.map((ach, index) => {
+          if (!ach.tier) return INITIAL_ACHIEVEMENTS[index] || ach;
+          return ach;
+      });
 
       return { success: true, data: user.data };
     }
@@ -99,7 +106,8 @@ export const authService = {
         sanctuary: [],
         challenges: INITIAL_CHALLENGES,
         streak: INITIAL_STREAK,
-        isPro: false
+        isPro: false,
+        blockedApps: INITIAL_BLOCKED_APPS
       }
     };
 
@@ -126,10 +134,18 @@ export const authService = {
     
     // Migration checks on load as well
     if (data) {
-      if (!data.sanctuary) data.sanctuary = [];
-      if (!data.challenges) data.challenges = JSON.parse(JSON.stringify(INITIAL_CHALLENGES));
-      if (!data.streak) data.streak = { ...INITIAL_STREAK };
-      if (data.isPro === undefined) data.isPro = false;
+        if (!data.sanctuary) data.sanctuary = [];
+        if (!data.challenges) data.challenges = JSON.parse(JSON.stringify(INITIAL_CHALLENGES));
+        if (!data.streak) data.streak = { ...INITIAL_STREAK };
+        if (data.isPro === undefined) data.isPro = false;
+        if (!data.blockedApps) data.blockedApps = INITIAL_BLOCKED_APPS;
+        if (data.stats.focusDust === undefined) data.stats.focusDust = 0;
+        
+        // Ensure new fields exist on achievements
+        data.achievements = data.achievements.map((ach, index) => {
+             if (!ach.tier) return { ...INITIAL_ACHIEVEMENTS[index], progress: ach.progress };
+             return ach;
+        });
     }
     return data;
   },
